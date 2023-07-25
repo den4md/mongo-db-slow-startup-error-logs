@@ -1,0 +1,26 @@
+#### Details
+
+After starting *mongod.exe* as standalone program (Community, without replication), it freezes right after the start (see logs), sometimes for few seconds, sometimes for minutes, sometimes without any freeze at all. While developing my projects I have to restart it frequently. Most delays are *20 seconds*. While freezing there are no logs from the process and it's impossible to make a connection (because it hasn't start listening on the port and even hasn't discovered db files - see logs). After freezing program works normally without any lags/delays/crashes.
+
+It is freezing specifically on my PC (Windows 10 x64 Pro 22H2), not my colleagues'/friends' PCs. It always freezes in project's Win container (base image: mcr.microsoft.com/dotnet/framework/runtime:4.8-windowsservercore-ltsc2019 [0f9b29d3ffaf]), but with smaller delay (5-15 seconds) and this is the main problem, because this container goes to production.
+
+Database has no user/pass, and works without SSL/TLS. Executable usually is started as a child process of .NET Framework 4.6.2 program which does correct output/error redirection. The problem appears with manual starting as well. The binding is always 127.0.0.1 to allow only internal connections.
+
+The pattern seems to be random. I tried empty dbpath, i.e. new db, and existing db - no difference. Admin priveledges don't matter. I tried **v3.4.4** (is used in container, I can't upgrade it to newer) and **v5.0.8** (another project - without container, but the same problem). The port is not the standard one, but is always free, and by changing it nothing changes in behavior. <kbd>Ctrl + C</kbd> can't stop immediately and gives several variants of outputs. `--smallFiles` doesn't help. `--syncdelay 0 --nojournal` doesn't help. `-repair` doesn't help. Changing `--bind_ip` doesn't help. Changing '--dbpath' to other drive doesn't help either. Denying to read/write dbpath also causes initial delay.
+
+Tried to set WiredTiger to following value (doesn't help):
+```js
+db.adminCommand( { "setParameter": 1, "wiredTigerEngineRuntimeConfig": "eviction=(threads_min=20,threads_max=20),checkpoint=(wait=60),eviction_dirty_trigger=5,eviction_dirty_target=1,eviction_trigger=95,eviction_target=80"})
+```
+
+#### My thoughts
+
+I've seen a lot of issues which were solved by setting up WiredTiger correctly, but this delay happens before the program makes first mention of it (see log '1.hjson' - "id":22315), therefore this is probably not case, but I am still open for your suggestions.
+
+The delay happens in the first logs. I've taken a quick look at the mongo source code (I don't know C++ well though), and there are some static core initializers (declared with `MONGO_INITIALIZER`). Their order is random and their context in logs somehow varies between '-' and 'main' values. Maybe there is some non-logged initializer which makes creates this delay...
+
+Any help will be appreciated!
+
+#### Logs
+
+To make question shorted, logs are available on [GitHub](https://github.com/den4md/mongo-db-slow-startup-error-logs) (some information is changed intentionally).
